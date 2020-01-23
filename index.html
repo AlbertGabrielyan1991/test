@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <style type="text/css">
+        #resultTable tbody td {
+            border: 1px dotted black;
+            padding: 5px;
+            text-align: center;
+        }
+
+        .data_row td {
+            border: 1px solid black;
+            padding: 5px;
+            text-align: center;
+        }
+
+        #resultTable td sub { padding: 5px; }
+    </style>
+    <title>Stock market data</title>
+    <link rel="stylesheet" href="http://code.jquery.com/ui/1.11.2/themes/smoothness/jquery-ui.css">
+    <script src="http://code.jquery.com/jquery-1.10.2.js"></script>
+    <script src="http://code.jquery.com/ui/1.11.2/jquery-ui.js"></script>
+    <script type="text/javascript" src="https://www.google.com/jsapi"></script>
+    <script type="text/javascript">
+
+        google.load('visualization', '1.0', { 'packages': ['corechart'] });
+        google.setOnLoadCallback(drawChart);
+
+        function getParameterByName(name) {
+            name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+            var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+                results = regex.exec(location.search);
+            return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+        }
+
+        function addDays(date, days) {
+            var result = new Date(date);
+            result.setDate(date.getDate() + days);
+            return x;
+        }
+		
+		        function addDays(date, days) {
+            var result = new Date(date);
+            result.setDate(date.getDate() + days);
+            return result;
+        }
+
+        function pad(num) {
+            var s = "0" + num;
+            return s.substr(s.length - 2);
+        }
+
+        function dateToString(date) {
+            return date.getFullYear().toString() + '-' + pad(date.getMonth() + 1, 2) + '-' + pad(date.getDate(), 2);
+        }
+
+        function getRandomValue() {
+            return Math.floor((Math.random() * 100));
+        }
+
+        function addYear(date, years) {
+            var y = date.getFullYear();
+            var m = date.getMonth();
+            var d = date.getDate();
+            return new Date(y + years, m, d);
+        }
+
+        function DrawPlot() {
+            drawChart($('#datepicker').datepicker("getDate"));
+        }
+
+
+        function OpenYahoo() {
+            var stok = $('#stock').val().trim();
+            var desiredDate = $('#datepicker').datepicker("getDate");
+            var fromDate = addDays(desiredDate, -50);
+            var toDate = addDays(desiredDate, 130);
+            var uri = encodeURI('http://finance.yahoo.com/echarts?s=' +
+                stok +
+                '+Interactive#{"range":"5y","allowChartStacking":true}');
+            var win = window.open(uri, '_blank');
+            if (win) {
+                //Browser has allowed it to be opened
+                win.focus();
+            }
+        };
+
+        $(document).ready(function() {
+            var stock = getParameterByName("stock");
+
+            if (stock !== "") {
+                $('#stock').val(stock);
+            }
+
+            $('#datepicker').datepicker({
+                onSelect: function() {
+                    DrawPlot();
+                }
+            });
+            $("#datepicker").datepicker("setDate", new Date());
+            $("#plotChart").click(function() { DrawPlot(); });
+            $("#plotDivident").click(function() { drawChart("Divident"); });
+            $("#plot10Q").click(function() { drawChart("10Q"); });
+            $("#openYa").click(function() { OpenYahoo(); });
+        });
+
+        function getYahooData(stok, fromDate, toDate, period) {
+            var results;
+            var getPageData = function(site1, condition) { var yql = "select * from htmlstring where url='" + site1 + "'" + condition;
+                var resturl = "http://query.yahooapis.com/v1/public/yql?q=" +
+                    encodeURIComponent(yql) +
+                    "&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys";
+                $.ajax({
+                    async: false,
+                    url: resturl,
+                    dataType: 'json',
+                    success: function(json) {
+                        results = json.query.results;
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) { $('#msgText').html(textStatus); }
+                });
+            };
+            var isDiv = period === "v";
+            var GetDivDataString = function(dataResult) {
+                var dateData = dataResult.split("<\/tr>");
+                var result = [];
+                dateData.forEach(function(item, i, arr) {
+                    var dateLines = item.match(/[^\r\n]+/g);
+                    if (dateLines == null || dateLines.length !== 11) {
+                        return;
+                    }
+                    var dateString = dateLines[2].match(/.*<span.*>(.*)<\/span>.*/)[1];
+                    var date = new Date(dateString);
+                    var divString = dateLines[5].match(/.*<strong.*>(.*)<\/strong>.*/)[1];
+                    var dateResult = dateToString(date) + "," + divString;
+                    result.push(dateResult);
+                });
+                return result;
+            };
+
+
+            var yqlCondition;
+            var site;
+            if (isDiv) {
+                site = "https://finance.yahoo.com/quote/" +
+                    stok +
+                    "/history?period1=" + Math.round(fromDate.getTime() / 1000) + "&period2=" + Math.round(toDate.getTime() / 1000) + "&interval=div%7Csplit&filter=div&frequency=1d";
+                yqlCondition = " AND xpath='//tr[@class]'";
+            } else {
+                getPageData("https://finance.google.com/finance/historical?q=" + stok, " AND xpath=\"//input[@type='hidden']/@value\"");
+                var resultsArray = results.result.split('\n');
+                var ei = resultsArray[0];
+                var cid = resultsArray[1];
+                site = "http://finance.google.com/finance/historical??q=" +
+                    stok +
+                    "&startdate=" +
+                    fromDate.toLocaleString("en-us", { month: "short" }).toString() +
+                    "+" +
+                    fromDate.getDate() +
+                    "%2C+" +
+                    fromDate.getFullYear() +
+                    "&enddate=" +
+                    toDate.toLocaleString("en-us", { month: "short" }).toString() +
+                    "+" +
+                    toDate.getDate() +
+                    "%2C+" +
+                    toDate.getFullYear() +
+                    "&output=csv" +
+                    "&cid=" + cid +
+                    "&ei=" + ei;
+                yqlCondition = "";
+            }
+            getPageData(site, yqlCondition);
+            var getDataResult = results != null
+                ? (isDiv
+                    ? GetDivDataString(results.result)
+                    : results.result.match(/.*<body.*>([\s\S]*)<\/body>.*/)[1])
+                : null;
+            return getDataResult;
+        }
+
+        function getTableData(stok) {
+            //var url = 'https://query.yahooapis.com/v1/public/yql?q=select%20*%20from%20html%20where%20url%20%3D%20%22finance.yahoo.com%2Fd%2Fquotes.csv%3Fs%3D' + stok + '%26f%3Dwpyvd%22&format=json';
+
+            var site = "https://finance.yahoo.com/quote/" + stok;
+            var yql = "select * from htmlstring where url='" + site +"' AND xpath='//td[@data-test]'";
+            var url = "http://query.yahooapis.com/v1/public/yql?q=" +
+                encodeURIComponent(yql) +
+                "&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys";
+            var tableData;
+            $.ajax({
+                async: false,
+                url: url,
+                dataType: 'json',
+                success: function(json) {
+                    tableData = json.query.results != null ? json.query.results.result.match(/>[^<]*([^\s<]+)[^<]*</g) : null;
+                },
+                error: function(jqXHR, textStatus, errorThrown) { $('#msgText').html(errorThrown.message); }
+            });
+            return tableData;
+        }
+
+        function fillResultTable(dividentDates, amount, prices, highPrices1) {
+            $("#resultTable").find("tbody").find("tr").remove();
+            var average = [0, 0, 0];
+
+            for (var k = dividentDates.length - 1; k >= 0; k--) {
+                var targets = [];
+                targets[0] = prices[k] + amount[k] * 0.5;
+                targets[1] = prices[k] + amount[k] * 0.75;
+                targets[2] = prices[k] + amount[k];
+                var toReach = [];
+                toReach[0] = 0;
+                toReach[1] = 0;
+                toReach[2] = 0;
+                for (var i = 0; i < highPrices1[k].length; i++) {
+                    for (var j = 0; j < 3; j++) {
+                        if (toReach[j] == 0 && highPrices1[k][i] >= targets[j]) {
+                            toReach[j] = i + 1;
+                        }
+                    }
+                }
+                for (var j = 0; j < 3; j++) {
+                    average[j] += toReach[j];
+                }
+                $('#resultTable')
+                    .append('<tr><td>' +
+                        dividentDates[k].split('-')[0] +
+                        '</td><td>' +
+                        toReach[0] +
+                        '</td><td>' +
+                        toReach[1] +
+                        '</td><td>' +
+                        toReach[2] +
+                        '</td></tr>');
+            }
+            for (var j = 0; j < 3; j++) {
+                average[j] /= dividentDates.length;
+            }
+            $('#resultTable')
+                .append('<tr><td>' +
+                    'Average' +
+                    '</td><td>' +
+                    average[0] +
+                    '</td><td>' +
+                    average[1] +
+                    '</td><td>' +
+                    average[2] +
+                    '</td></tr>');
+        };
+
+        function drawChart(d) {
+
+            $('#msgText').html('');
+
+            var totalYears = 10;
+
+            var isDivident = d == "Divident";
+
+            var stok = $('#stock').val().trim();
+            var currentDate = new Date();
+            var disiredDate = $('#datepicker').datepicker("getDate");
+            //if (isDivident) {
+            var divDates = getYahooData(stok, addYear(currentDate, -totalYears - 1), currentDate, "v");
+            //}
+
+            var tableData = getTableData(stok);
+            var isNotManyData = tableData[13].indexOf("%") !== -1;
+            $('#weekHiLo').html(tableData[5].replace(/[<>\s]/g, ''));
+            $('#closePrice').html(tableData[0].replace(/[<>\s]/g, ''));
+            $('#yield').html((isNotManyData ? tableData[13] : tableData[15]).replace(/[<>\s]/g, '').match(/.*\((.*)\).*/)[1]);
+            $('#volume').html(tableData[7].replace(/[<>\s]/g, ''));
+            $('#dividend').html("$" + (isNotManyData ? tableData[13] : tableData[15]).replace(/[<>\s]/g, '').match(/([^(]*)\(.*/)[1]);
+            if (divDates.length > 1) {
+                $('#dividend').html("$" + divDates[1].split(',')[1]);
+            }
+            if (d == "10Q") {
+                var divDates = [];
+                divDates[divDates.length] = "";
+                isDivident = true;
+                var rssurl = encodeURI("https://query.yahooapis.com/v1/public/yql?q=select * from xml where url='") +
+                    encodeURIComponent("http://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=" +
+                        stok +
+                        "&type=10-Q%25&dateb=&owner=include&start=0&count=100&output=atom") +
+                    "'&format=json&callback=&diagnostics=false";
+                $.ajax({
+                    async: false,
+                    crossDomain: true,
+                    url: rssurl,
+                    dataType: "json",
+                    success: function(x) {
+                        if (x.query.results == null) {
+                            divDates = null;
+                            return;
+                        }
+                        x.query.results.feed.entry.forEach(function(entry) {
+                            divDates[divDates.length] = entry.content['filing-date'];
+                        });
+                        var unique = divDates.filter(function(itm, index, a) {
+                            return index == a.indexOf(itm);
+                        });
+                        divDates = unique;
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        $('#msgText').html(textStatus + errorThrown);
+                        divDates = null;
+                    }
+                });
+            }
+            if (isDivident && (divDates == null || divDates.length < 2)) {
+                $('#msgText').html("No data");
+                return;
+            }
+
+            d = d.type !== 'load' ? d : new Date();
+
+            if (isDivident) {
+                for (var i = 1; i < divDates.length; i++) {
+                    var divDateArr = divDates[i].split(',')[0].split('-');
+                    if (Number(divDateArr[1]) == disiredDate.getMonth() + 1) {
+                        var targetDivMonth = Number(divDateArr[1]);
+                        var divDate = new Date(divDateArr[0], targetDivMonth - 1, divDateArr[2]);
+                        d = divDate;
+                    }
+                }
+                if (targetDivMonth == null) {
+                    $('#msgText').html("No data");
+                    return;
+                }
+            }
+            var year = d.getFullYear();
+            var divBeforeOfset = 10;
+            var divAfterOfset = 90;
+            var beforeDays = isDivident ? divBeforeOfset * 2 : 10;
+            var afterDays = isDivident ? divAfterOfset * 2 : 80;
+            var startDate = addDays(d, -beforeDays);
+            var endDate = addDays(d, afterDays);
+            var startDates = [];
+            var endDates = [];
+            var targetDivDates = [];
+            var dividentesAmount = [];
+
+            var l = 1;
+            var k;
+            for (k = 0; k < totalYears; k++) {
+                if (isDivident) {
+                    if (l >= divDates.length)
+                        break;
+                    var dateValues = divDates[l++].split(',');
+                    divDateArr = dateValues[0].split('-');
+                    var currentDivMonth = Number(divDateArr[1]);
+                    if (currentDivMonth != targetDivMonth &&
+                        currentDivMonth != (targetDivMonth - 1) &&
+                        currentDivMonth != (targetDivMonth + 1)) {
+                        k--;
+                        continue;
+                    }
+                    divDate = new Date(divDateArr[0], currentDivMonth - 1, divDateArr[2]);
+                    targetDivDates[targetDivDates.length] = dateToString(divDate);
+                    dividentesAmount[dividentesAmount.length] = parseFloat(dateValues[1]);
+                }
+                startDates[k] = isDivident ? addDays(divDate, -beforeDays) : addYear(startDate, -k);
+                endDates[k] = isDivident ? addDays(divDate, afterDays) : addYear(endDate, -k);
+            }
+
+            var fullData = [""].concat(getYahooData(stok, addYear(currentDate, -totalYears - 1), currentDate, "d").match(/[^\r\n]+/g));
+
+            if (fullData == null || fullData.length == 0) {
+                $('#msgText').html('No data');
+                return;
+            }
+
+            var yearsData = [];
+            var highPrices = [];
+            var openPrices = [];
+            var allDates = [];
+            var maxValues = [];
+            var minValues = [];
+
+            if (isDivident) {
+                for (var i = 2; i < fullData.length; i++) {
+                    var currentDataArray = fullData[i].split(',');
+                    var date = currentDataArray[0].split("-");
+                    var dt = new Date(date[1] + " " + date[0] + ", " + (Number(date[2]) + 2000));;
+                    for (var j = yearsData.length; j < targetDivDates.length; j++)
+                        if (dateToString(dt) == targetDivDates[j]) {
+                            yearsData[j] = [];
+                            highPrices[j] = [];
+                            var endI = i - divAfterOfset;
+                            if (endI < 2)
+                                endI = 2;
+                            var startI = i + divBeforeOfset;
+                            if (startI >= fullData.length)
+                                startI = fullData.length - 1;
+                            maxValues[j] = 0;
+                            minValues[j] = 1e20;
+                            for (k = startI; k >= endI; k--) {
+                                var currentDataArray = fullData[k].split(',');
+                                var high = parseFloat(currentDataArray[2]);
+                                var price = (high + parseFloat(currentDataArray[3])) / 2;
+                                if (maxValues[j] < price)
+                                    maxValues[j] = price;
+                                if (minValues[j] > price)
+                                    minValues[j] = price;
+                                if (yearsData[j].length == 0) {
+                                    openPrices[j] = parseFloat(currentDataArray[1]);
+                                }
+                                highPrices[j][yearsData[j].length] = high;
+                                yearsData[j][yearsData[j].length] = price;
+
+                            }
+                        }
+
+                }
+            } else
+                for (k = 0; k < totalYears; k++) {
+                    maxValues[k] = 0;
+                    minValues[k] = 1e20;
+                    yearsData[k] = [];
+                    for (var i = 2; i < fullData.length; i++) {
+                        var currentDataArray = fullData[i].split(',');
+                        var date = currentDataArray[0].split("-");
+                        var dt = new Date(date[1] + " " + date[0] + ", " + (Number(date[2]) + 2000));
+
+                        if (startDates[k] <= dt && dt <= endDates[k]) {
+                            var high = parseFloat(currentDataArray[2]);
+                            var price = (high + parseFloat(currentDataArray[3])) / 2;
+                            if (maxValues[k] < price)
+                                maxValues[k] = price;
+                            if (minValues[k] > price)
+                                minValues[k] = price;
+
+                            var newDateString = pad(dt.getMonth() + 1, 2) + '-' + pad(dt.getDate(), 2);//dateToString(dt);
+                            if (allDates.indexOf(newDateString) < 0) allDates[allDates.length] = newDateString;
+                            yearsData[k][newDateString] = price;
+                        }
+                    }
+                }
+            if (isDivident) {
+                fillResultTable(targetDivDates, dividentesAmount, openPrices, highPrices);
+            }
+            var data = new google.visualization.DataTable();
+
+            if (isDivident)
+                data.addColumn('number', 'ofset');
+            else
+                data.addColumn('date', 'date');
+
+            for (k = (isDivident ? yearsData.length - 1 : totalYears - 1); k >= 0; k--) {
+                if (isDivident) {
+                    data.addColumn('number', targetDivDates[k]);
+                    data.addColumn('number', targetDivDates[k]);
+                } else {
+                    data.addColumn('number', year - k);
+                    data.addColumn('number', year - k);
+                }
+            }
+            if (isDivident) {
+                for (k = totalYears - yearsData.length - 1; k >= 0; k--) {
+                    data.addColumn('number', null);
+                    data.addColumn('number', null);
+                }
+            }
+            data.addColumn('number', 'average');
+            data.addColumn('number', 'average');
+            var ind;
+            var needToExtend = false;
+            if (allDates.some(function (elem) { return /^01/.test(elem); }) && allDates.some(function (elem) { return /^12/.test(elem); })) {
+                needToExtend = true;
+                for (ind = 0; ind < allDates.length; ind++) {
+                    if (!/^1/.test(allDates[ind])) {
+                        allDates[ind] = '2' + allDates[ind];
+                    }
+                }
+
+            }
+            var sortedDates = allDates.sort();
+            if (needToExtend) {
+                for (ind = 0; ind < allDates.length; ind++) {
+                    if (/^2/.test(allDates[ind])) {
+                        allDates[ind] = allDates[ind].substring(1);
+                    }
+                }
+            }
+            for (var i = 0; i < (isDivident ? divBeforeOfset + divAfterOfset + 1 : sortedDates.length); i++) {
+                var row = [];
+                var date;
+                if (isDivident) {
+                    row[row.length] = i - divBeforeOfset;
+                } else {
+                    date = sortedDates[i].split("-");
+                    row[row.length] = new Date(needToExtend && date[0] < 7 ? d.getFullYear() + 1 : d.getFullYear(), Number(date[0] - 1), Number(date[1]));
+                }
+                var averageSum = 0;
+                var averageCount = 0;
+                var isTargetDate = isDivident
+                    ? i === divBeforeOfset
+                    : row[0].getMonth() === d.getMonth() && row[0].getDate() === d.getDate();
+                for (k = (isDivident ? yearsData.length - 1 : totalYears - 1); k >= 0; k--) {
+                    var value = yearsData[k][isDivident ? i : sortedDates[i]];
+                    row[row.length] = value === undefined
+                        ? null
+                        : Number(((value - minValues[k] /* globalMin*/) /
+                            (/*globalMax - globalMin*/ maxValues[k] - minValues[k]) *
+                            100).toFixed(2));
+                    row[row.length] = isTargetDate ? row[row.length - 1] : null;
+                    if (row[row.length - 2] != null) {
+                        averageSum += row[row.length - 2];
+                        averageCount += 1;
+                    }
+                }
+                for (k = totalYears - yearsData.length - 1; k >= 0; k--) {
+                    row[row.length] = null;
+                    row[row.length] = null;
+                }
+                row[row.length] = Number((averageSum / averageCount).toFixed(2));
+                row[row.length] = isTargetDate ? row[row.length - 1] : null;
+                data.addRow(row);
+            }
+
+            var yearToSelect = 0;
+            drawInerChart(data, yearToSelect);
+
+        }
+
+        function drawInerChart(data, yearToSelect) {
+            var chart = new google.visualization.LineChart(document.getElementById('visualization'));
+            var propertyes = {
+                height: 700,
+                interpolateNulls: true,
+                series: {}
+            };
+            for (var i = 0; i < (data.getNumberOfColumns() - 3) / 2; i++) {
+                propertyes.series[(i * 2).toString()] =
+                    {
+                        color: yearToSelect == (9 - i) ? '#0000ff' : '#c0c0ff'
+                    };
+                propertyes.series[(i * 2 + 1).toString()] =
+                    {
+                        color: '#ff0000',
+                        lineWidth: 0,
+                        pointSize: 5,
+                        visibleInLegend: false
+                    };
+            }
+
+            propertyes.series[(i * 2).toString()] = {
+                color: '#00FF00'
+            };
+            propertyes.series[(i * 2 + 1).toString()] = {
+                color: '#ff0000',
+                lineWidth: 0,
+                pointSize: 5,
+                visibleInLegend: false
+            };
+            chart.draw(data, propertyes);
+            google.visualization.events.addListener(chart,
+                'select',
+                function() {
+                    var selection = chart.getSelection();
+                    yearToSelect = 10 - (selection[0].column + 1) / 2;
+                    drawInerChart(data, yearToSelect);
+                });
+        }
+
+    </script>
+</head>
+<body>
+Date: <input type="text" id="datepicker"> Stock symbol: <input type="text" name="stock" id="stock" value="T">
+<input type="button" id="plotChart" value="Plot Chart"/>
+<input type="button" id="plotDivident" value="Plot Dividend"/>
+<input type="button" id="plot10Q" value="Plot 10-Q filing" style="display: none;"/>
+<label style="color: red" id="msgText"></label><br>
+<table style="width: 100%;">
+    <tr>
+        <td style="width: 80%;">
+            <div id="visualization"></div>
+        </td>
+        <td style="width: 20%">
+            <table id="resultTable" style="border-collapse: collapse;">
+                <thead>
+                <tr>
+                    <th>Year</th>
+                    <th>50%</th>
+                    <th>75%</th>
+                    <th>100%</th>
+                </tr>
+                </thead>
+                <tbody>
+                </tbody>
+                <tfoot>
+                <tr class="blank_row">
+                    <td colspan="2">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td>
+                        <input type="button" id="openYa" value="Charts"/>
+                    </td>
+                </tr>
+                <tr class="blank_row">
+                    <td colspan="2">&nbsp;</td>
+                </tr>
+                <tr class="data_row">
+                    <td>Closing price</td><td id="closePrice"></td>
+                </tr>
+                <tr class="data_row">
+                    <td>52 week hi-lo</td><td id="weekHiLo"></td>
+                </tr>
+                <tr class="data_row">
+                    <td>Dividend</td><td id="dividend"></td>
+                </tr>
+                <tr class="data_row">
+                    <td>Yield</td><td id="yield"></td>
+                </tr>
+                <tr class="data_row">
+                    <td>Volume</td><td id="volume"></td>
+                </tr>
+
+                </tfoot>
+            </table>
+        </td>
+    </tr>
+</table>
+</body>
+</html>
